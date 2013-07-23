@@ -276,10 +276,10 @@ if (!defined('AJAX_SCRIPT')) {
 }
 
 // File permissions on created directories in the $CFG->dataroot
-if (empty($CFG->directorypermissions)) {
+if (!isset($CFG->directorypermissions)) {
     $CFG->directorypermissions = 02777;      // Must be octal (that's why it's here)
 }
-if (empty($CFG->filepermissions)) {
+if (!isset($CFG->filepermissions)) {
     $CFG->filepermissions = ($CFG->directorypermissions & 0666); // strip execute flags
 }
 // better also set default umask because recursive mkdir() does not apply permissions recursively otherwise
@@ -288,6 +288,11 @@ umask(0000);
 // exact version of currently used yui2 and 3 library
 $CFG->yui2version = '2.9.0';
 $CFG->yui3version = '3.9.1';
+
+if (!defined('MOODLE_INTERNAL')) { // Necessary because cli installer has to define it earlier.
+    /** Used by library scripts to check they are being called by Moodle. */
+    define('MOODLE_INTERNAL', true);
+}
 
 // core_component can be used in any scripts, it does not need anything else.
 require_once($CFG->libdir .'/classes/component.php');
@@ -314,11 +319,6 @@ if (defined('ABORT_AFTER_CONFIG')) {
         require_once("$CFG->dirroot/lib/configonlylib.php");
         return;
     }
-}
-
-/** Used by library scripts to check they are being called by Moodle */
-if (!defined('MOODLE_INTERNAL')) { // necessary because cli installer has to define it earlier
-    define('MOODLE_INTERNAL', true);
 }
 
 // Early profiling start, based exclusively on config.php $CFG settings
@@ -514,7 +514,6 @@ if (defined('COMPONENT_CLASSLOADER')) {
 }
 
 // Load up standard libraries
-require_once($CFG->libdir .'/textlib.class.php');   // Functions to handle multibyte strings
 require_once($CFG->libdir .'/filterlib.php');       // Functions for filtering test as it is output
 require_once($CFG->libdir .'/ajax/ajaxlib.php');    // Functions for managing our use of JavaScript and YUI
 require_once($CFG->libdir .'/weblib.php');          // Functions relating to HTTP and content
@@ -718,7 +717,7 @@ initialise_fullme();
 // define SYSCONTEXTID in config.php if you want to save some queries,
 // after install it must match the system context record id.
 if (!defined('SYSCONTEXTID')) {
-    get_system_context();
+    context_system::instance();
 }
 
 // Defining the site - aka frontpage course

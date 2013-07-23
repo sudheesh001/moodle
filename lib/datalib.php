@@ -507,10 +507,11 @@ function get_users_listing($sort='lastaccess', $dir='ASC', $page=0, $recordsperp
                 array('id', 'username', 'email', 'firstname', 'lastname', 'city', 'country',
                 'lastaccess', 'confirmed', 'mnethostid'));
     }
+    $namefields = get_all_user_name_fields(true);
+    $extrafields = "$extrafields, $namefields";
 
     // warning: will return UNCONFIRMED USERS
-    return $DB->get_records_sql("SELECT id, username, email, firstname, lastname, city, country,
-                                        lastaccess, confirmed, mnethostid, suspended $extrafields
+    return $DB->get_records_sql("SELECT id, username, email, city, country, lastaccess, confirmed, mnethostid, suspended $extrafields
                                    FROM {user}
                                   WHERE $select
                                   $sort", $params, $page, $recordsperpage);
@@ -618,7 +619,9 @@ function get_courses($categoryid="all", $sort="c.sortorder ASC", $fields="c.*") 
 
     $visiblecourses = array();
 
-    list($ccselect, $ccjoin) = context_instance_preload_sql('c.id', CONTEXT_COURSE, 'ctx');
+    $ccselect = ', ' . context_helper::get_preload_record_columns_sql('ctx');
+    $ccjoin = "LEFT JOIN {context} ctx ON (ctx.instanceid = c.id AND ctx.contextlevel = :contextlevel)";
+    $params['contextlevel'] = CONTEXT_COURSE;
 
     $sql = "SELECT $fields $ccselect
               FROM {course} c
@@ -631,7 +634,7 @@ function get_courses($categoryid="all", $sort="c.sortorder ASC", $fields="c.*") 
 
         // loop throught them
         foreach ($courses as $course) {
-            context_instance_preload($course);
+            context_helper::preload_from_record($course);
             if (isset($course->visible) && $course->visible <= 0) {
                 // for hidden courses, require visibility check
                 if (has_capability('moodle/course:viewhiddencourses', context_course::instance($course->id))) {
@@ -680,7 +683,9 @@ function get_courses_page($categoryid="all", $sort="c.sortorder ASC", $fields="c
         $categoryselect = "";
     }
 
-    list($ccselect, $ccjoin) = context_instance_preload_sql('c.id', CONTEXT_COURSE, 'ctx');
+    $ccselect = ', ' . context_helper::get_preload_record_columns_sql('ctx');
+    $ccjoin = "LEFT JOIN {context} ctx ON (ctx.instanceid = c.id AND ctx.contextlevel = :contextlevel)";
+    $params['contextlevel'] = CONTEXT_COURSE;
 
     $totalcount = 0;
     if (!$limitfrom) {
@@ -698,7 +703,7 @@ function get_courses_page($categoryid="all", $sort="c.sortorder ASC", $fields="c
     $rs = $DB->get_recordset_sql($sql, $params);
     // iteration will have to be done inside loop to keep track of the limitfrom and limitnum
     foreach($rs as $course) {
-        context_instance_preload($course);
+        context_helper::preload_from_record($course);
         if ($course->visible <= 0) {
             // for hidden courses, require visibility check
             if (has_capability('moodle/course:viewhiddencourses', context_course::instance($course->id))) {
@@ -798,7 +803,10 @@ function get_courses_search($searchterms, $sort, $page, $recordsperpage, &$total
     $limitfrom = $page * $recordsperpage;
     $limitto   = $limitfrom + $recordsperpage;
 
-    list($ccselect, $ccjoin) = context_instance_preload_sql('c.id', CONTEXT_COURSE, 'ctx');
+    $ccselect = ', ' . context_helper::get_preload_record_columns_sql('ctx');
+    $ccjoin = "LEFT JOIN {context} ctx ON (ctx.instanceid = c.id AND ctx.contextlevel = :contextlevel)";
+    $params['contextlevel'] = CONTEXT_COURSE;
+
     $fields = array_diff(array_keys($DB->get_columns('course')), array('modinfo', 'sectioncache'));
     $sql = "SELECT c.".join(',c.',$fields)." $ccselect
               FROM {course} c
@@ -810,7 +818,7 @@ function get_courses_search($searchterms, $sort, $page, $recordsperpage, &$total
     foreach($rs as $course) {
         if (!$course->visible) {
             // preload contexts only for hidden courses or courses we need to return
-            context_instance_preload($course);
+            context_helper::preload_from_record($course);
             $coursecontext = context_course::instance($course->id);
             if (!has_capability('moodle/course:viewhiddencourses', $coursecontext)) {
                 continue;
@@ -1781,8 +1789,8 @@ function get_logs($select, array $params=null, $order='l.time DESC', $limitfrom=
            $select";
 
     $totalcount = $DB->count_records_sql($sql, $params);
-
-    $sql = "SELECT l.*, u.firstname, u.lastname, u.picture
+    $allnames = get_all_user_name_fields(true, 'u');
+    $sql = "SELECT l.*, $allnames, u.picture
               FROM {log} l
               LEFT JOIN {user} u ON l.userid = u.id
            $select

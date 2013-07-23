@@ -823,6 +823,45 @@ class accesslib_testcase extends advanced_testcase {
     }
 
     /**
+     * Test role default allows.
+     */
+    public function test_get_default_role_archetype_allows() {
+        $archetypes = get_role_archetypes();
+        foreach ($archetypes as $archetype) {
+
+            $result = get_default_role_archetype_allows('assign', $archetype);
+            $this->assertTrue(is_array($result));
+
+            $result = get_default_role_archetype_allows('override', $archetype);
+            $this->assertTrue(is_array($result));
+
+            $result = get_default_role_archetype_allows('switch', $archetype);
+            $this->assertTrue(is_array($result));
+        }
+
+        $result = get_default_role_archetype_allows('assign', '');
+        $this->assertSame(array(), $result);
+
+        $result = get_default_role_archetype_allows('override', '');
+        $this->assertSame(array(), $result);
+
+        $result = get_default_role_archetype_allows('switch', '');
+        $this->assertSame(array(), $result);
+
+        $result = get_default_role_archetype_allows('assign', 'wrongarchetype');
+        $this->assertSame(array(), $result);
+        $this->assertDebuggingCalled();
+
+        $result = get_default_role_archetype_allows('override', 'wrongarchetype');
+        $this->assertSame(array(), $result);
+        $this->assertDebuggingCalled();
+
+        $result = get_default_role_archetype_allows('switch', 'wrongarchetype');
+        $this->assertSame(array(), $result);
+        $this->assertDebuggingCalled();
+    }
+
+    /**
      * Test allowing of role assignments.
      * @return void
      */
@@ -2253,7 +2292,6 @@ class accesslib_testcase extends advanced_testcase {
         $this->assertEquals($DB->count_records('context', array('depth'=>0)), 0);
         $this->assertEquals($DB->count_records('context', array('path'=>NULL)), 0);
 
-
         // ======= context_helper::cleanup_instances() ==========================
 
         $lastcourse = $DB->get_field_sql("SELECT MAX(id) FROM {course}");
@@ -2289,7 +2327,7 @@ class accesslib_testcase extends advanced_testcase {
                 $this->assertEquals(context_inspection::test_context_cache_size(), CONTEXT_CACHE_MAX_SIZE);
             } else if ($i == CONTEXT_CACHE_MAX_SIZE) {
                 // once the limit is reached roughly 1/3 of records should be removed from cache
-                $this->assertEquals(context_inspection::test_context_cache_size(), (int)(CONTEXT_CACHE_MAX_SIZE * (2/3) +102));
+                $this->assertEquals(context_inspection::test_context_cache_size(), (int)ceil(CONTEXT_CACHE_MAX_SIZE * (2/3) + 101));
             }
         }
         // We keep the first 100 cached
@@ -2313,7 +2351,7 @@ class accesslib_testcase extends advanced_testcase {
 
         foreach ($DB->get_records('context') as $contextid=>$record) {
             $context = context::instance_by_id($contextid);
-            $this->assertSame(context::instance_by_id($contextid, IGNORE_MISSING), $context);
+            $this->assertSame(get_context_instance_by_id($contextid, IGNORE_MISSING), $context);
             $this->assertSame(get_context_instance($record->contextlevel, $record->instanceid), $context);
             $this->assertSame(get_parent_contexts($context), $context->get_parent_context_ids());
             if ($context->id == SYSCONTEXTID) {
@@ -2324,16 +2362,34 @@ class accesslib_testcase extends advanced_testcase {
         }
 
         $children = get_child_contexts($systemcontext);
-        $this->resetDebugging();
+        // Using assertEquals here as assertSame fails for some reason...
+        $this->assertEquals($children, $systemcontext->get_child_contexts());
         $this->assertEquals(count($children), $DB->count_records('context')-1);
+        $this->resetDebugging();
         unset($children);
+
+        // Make sure a debugging is thrown.
+        get_context_instance($record->contextlevel, $record->instanceid);
+        $this->assertDebuggingCalled('get_context_instance() is deprecated, please use context_xxxx::instance() instead.', DEBUG_DEVELOPER);
+        get_context_instance_by_id($record->id);
+        $this->assertDebuggingCalled('get_context_instance_by_id() is deprecated, please use context::instance_by_id($id) instead.', DEBUG_DEVELOPER);
+        get_system_context();
+        $this->assertDebuggingCalled('get_system_context() is deprecated, please use context_system::instance() instead.', DEBUG_DEVELOPER);
+        get_parent_contexts($context);
+        $this->assertDebuggingCalled('get_parent_contexts() is deprecated, please use $context->get_parent_context_ids() instead.', DEBUG_DEVELOPER);
+        get_parent_contextid($context);
+        $this->assertDebuggingCalled('get_parent_contextid() is deprecated, please use $context->get_parent_context() instead.', DEBUG_DEVELOPER);
+        get_child_contexts($frontpagecontext);
+        $this->assertDebuggingCalled('get_child_contexts() is deprecated, please use $context->get_child_contexts() instead.', DEBUG_DEVELOPER);
 
         $DB->delete_records('context', array('contextlevel'=>CONTEXT_BLOCK));
         create_contexts();
+        $this->assertDebuggingCalled('create_contexts() is deprecated, please use context_helper::create_instances() instead.', DEBUG_DEVELOPER);
         $this->assertFalse($DB->record_exists('context', array('contextlevel'=>CONTEXT_BLOCK)));
 
         $DB->set_field('context', 'depth', 0, array('contextlevel'=>CONTEXT_BLOCK));
         build_context_path();
+        $this->assertDebuggingCalled('build_context_path() is deprecated, please use context_helper::build_all_paths() instead.', DEBUG_DEVELOPER);
         $this->assertFalse($DB->record_exists('context', array('depth'=>0)));
 
         $lastcourse = $DB->get_field_sql("SELECT MAX(id) FROM {course}");
@@ -2345,6 +2401,7 @@ class accesslib_testcase extends advanced_testcase {
         $DB->delete_records('block_instances', array('parentcontextid'=>$frontpagepagecontext->id));
         $DB->delete_records('course_modules', array('id'=>$frontpagepagecontext->instanceid));
         cleanup_contexts();
+        $this->assertDebuggingCalled('cleanup_contexts() is deprecated, please use context_helper::cleanup_instances() instead.', DEBUG_DEVELOPER);
         $count = 1; //system
         $count += $DB->count_records('user', array('deleted'=>0));
         $count += $DB->count_records('course_categories');
@@ -2353,17 +2410,33 @@ class accesslib_testcase extends advanced_testcase {
         $count += $DB->count_records('block_instances');
         $this->assertEquals($DB->count_records('context'), $count);
 
+        // Test legacy rebuild_contexts().
+        $context = context_course::instance($testcourses[2]);
+        rebuild_contexts(array($context));
+        $this->assertDebuggingCalled('rebuild_contexts() is deprecated, please use $context->reset_paths(true) instead.', DEBUG_DEVELOPER);
+        $context = context_course::instance($testcourses[2]);
+        $this->assertEquals($DB->get_field('context', 'path', array('id' => $context->id)), $context->path);
+        $this->assertEquals($DB->get_field('context', 'depth', array('id' => $context->id)), $context->depth);
+        $this->assertEquals(0, $DB->count_records('context', array('depth' => 0)));
+        $this->assertEquals(0, $DB->count_records('context', array('path' => null)));
+
         context_helper::reset_caches();
         preload_course_contexts($SITE->id);
+        $this->assertDebuggingCalled('preload_course_contexts() is deprecated, please use context_helper::preload_course() instead.', DEBUG_DEVELOPER);
         $this->assertEquals(1 + $DB->count_records('course_modules', array('course' => $SITE->id)),
                 context_inspection::test_context_cache_size());
 
         context_helper::reset_caches();
         list($select, $join) = context_instance_preload_sql('c.id', CONTEXT_COURSECAT, 'ctx');
+        $this->assertDebuggingCalled('context_instance_preload_sql() is deprecated, please use context_helper::get_preload_record_columns_sql() instead.', DEBUG_DEVELOPER);
+        $this->assertEquals(', ' . context_helper::get_preload_record_columns_sql('ctx'), $select);
+        $this->assertEquals('LEFT JOIN {context} ctx ON (ctx.instanceid = c.id AND ctx.contextlevel = ' . CONTEXT_COURSECAT . ')', $join);
         $sql = "SELECT c.id $select FROM {course_categories} c $join";
         $records = $DB->get_records_sql($sql);
         foreach ($records as $record) {
             context_instance_preload($record);
+            $this->assertDebuggingCalled('context_instance_preload() is deprecated, please use context_helper::preload_from_record() instead.',
+                    DEBUG_DEVELOPER);
             $record = (array)$record;
             $this->assertEquals(1, count($record)); // only id left
         }
@@ -2372,6 +2445,7 @@ class accesslib_testcase extends advanced_testcase {
         accesslib_clear_all_caches(true);
         $DB->delete_records('cache_flags', array());
         mark_context_dirty($systemcontext->path);
+        $this->assertDebuggingCalled('mark_context_dirty() is deprecated, please use $context->mark_dirty() instead.', DEBUG_DEVELOPER);
         $dirty = get_cache_flags('accesslib/dirtycontexts', time()-2);
         $this->assertTrue(isset($dirty[$systemcontext->path]));
 
@@ -2385,31 +2459,45 @@ class accesslib_testcase extends advanced_testcase {
         $course->category = $miscid;
         $DB->update_record('course', $course);
         context_moved($context, $categorycontext);
+        $this->assertDebuggingCalled('context_moved() is deprecated, please use context::update_moved() instead.', DEBUG_DEVELOPER);
         $context = context_course::instance($course->id);
         $this->assertEquals($context->get_parent_context(), $categorycontext);
 
         $this->assertTrue($DB->record_exists('context', array('contextlevel'=>CONTEXT_COURSE, 'instanceid'=>$testcourses[2])));
         delete_context(CONTEXT_COURSE, $testcourses[2]);
+        $this->assertDebuggingCalled('delete_context() is deprecated, please use context_helper::delete_instance() instead.', DEBUG_DEVELOPER);
         $this->assertFalse($DB->record_exists('context', array('contextlevel'=>CONTEXT_COURSE, 'instanceid'=>$testcourses[2])));
+        delete_context(CONTEXT_COURSE, $testcourses[2], false);
+        $this->assertDebuggingCalled('delete_context() is deprecated, please use $context->delete_content() instead.', DEBUG_DEVELOPER);
 
         $name = get_contextlevel_name(CONTEXT_COURSE);
+        $this->assertDebuggingCalled('get_contextlevel_name() is deprecated, please use context_helper::get_level_name() instead.', DEBUG_DEVELOPER);
         $this->assertFalse(empty($name));
 
         $context = context_course::instance($testcourses[2]);
         $name = print_context_name($context);
+        $this->assertDebuggingCalled('print_context_name() is deprecated, please use $context->get_context_name() instead.', DEBUG_DEVELOPER);
         $this->assertFalse(empty($name));
 
-        $url = get_context_url($coursecontext);
-        $this->assertFalse($url instanceof modole_url);
+        $url1 = get_context_url($coursecontext);
+        $this->assertDebuggingCalled('get_context_url() is deprecated, please use $context->get_url() instead.', DEBUG_DEVELOPER);
+        $url2 = $coursecontext->get_url();
+        $this->assertEquals($url1, $url2);
+        $this->assertFalse($url2 instanceof modole_url);
 
         $pagecm = get_coursemodule_from_instance('page', $testpages[7]);
         $context = context_module::instance($pagecm->id);
-        $coursecontext = get_course_context($context);
-        $this->assertEquals($coursecontext->contextlevel, CONTEXT_COURSE);
+        $coursecontext1 = get_course_context($context);
+        $this->assertDebuggingCalled('get_course_context() is deprecated, please use $context->get_course_context(true) instead.', DEBUG_DEVELOPER);
+        $coursecontext2 = $context->get_course_context(true);
+        $this->assertEquals($coursecontext1, $coursecontext2);
+        $this->assertEquals($coursecontext2->contextlevel, CONTEXT_COURSE);
         $this->assertEquals(get_courseid_from_context($context), $pagecm->course);
+        $this->assertDebuggingCalled('get_courseid_from_context() is deprecated, please use $context->get_course_context(false) instead.', DEBUG_DEVELOPER);
 
         $caps = fetch_context_capabilities($systemcontext);
-        $this->assertTrue(is_array($caps));
+        $this->assertDebuggingCalled('fetch_context_capabilities() is deprecated, please use $context->get_capabilities() instead.', DEBUG_DEVELOPER);
+        $this->assertEquals($systemcontext->get_capabilities(), $caps);
         unset($caps);
     }
 

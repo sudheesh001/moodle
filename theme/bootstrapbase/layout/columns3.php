@@ -14,6 +14,12 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
+if (right_to_left()) {
+    $regionbsid = 'region-bs-main-and-post';
+} else {
+    $regionbsid = 'region-bs-main-and-pre';
+}
+
 echo $OUTPUT->doctype() ?>
 <html <?php echo $OUTPUT->htmlattributes(); ?>>
 <head>
@@ -50,9 +56,9 @@ echo $OUTPUT->doctype() ?>
 <div id="page" class="container-fluid">
 
     <header id="page-header" class="clearfix">
-        <div id="page-navbar">
+        <div id="page-navbar" class="clearfix">
+            <div class="breadcrumb-nav"><?php echo $OUTPUT->navbar(); ?></div>
             <nav class="breadcrumb-button"><?php echo $OUTPUT->page_heading_button(); ?></nav>
-            <?php echo $OUTPUT->navbar(); ?>
         </div>
         <?php echo $OUTPUT->page_heading(); ?>
         <div id="course-header">
@@ -61,7 +67,7 @@ echo $OUTPUT->doctype() ?>
     </header>
 
     <div id="page-content" class="row-fluid">
-        <div id="region-bs-main-and-pre" class="span9">
+        <div id="<?php echo $regionbsid ?>" class="span9">
             <div class="row-fluid">
                 <section id="region-main" class="span8 pull-right">
                     <?php

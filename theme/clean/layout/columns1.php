@@ -53,9 +53,9 @@ echo $OUTPUT->doctype() ?>
 <div id="page" class="container-fluid">
 
     <header id="page-header" class="clearfix">
-        <div id="page-navbar">
+        <div id="page-navbar" class="clearfix">
+            <div class="breadcrumb-nav"><?php echo $OUTPUT->navbar(); ?></div>
             <nav class="breadcrumb-button"><?php echo $OUTPUT->page_heading_button(); ?></nav>
-            <?php echo $OUTPUT->navbar(); ?>
         </div>
         <?php echo $html->heading; ?>
         <div id="course-header">
@@ -63,16 +63,14 @@ echo $OUTPUT->doctype() ?>
         </div>
     </header>
 
-    <div id="page-content">
-        <div id="region-bs-main-and-pre">
-            <section id="region-main">
-                <?php
-                echo $OUTPUT->course_content_header();
-                echo $OUTPUT->main_content();
-                echo $OUTPUT->course_content_footer();
-                ?>
-            </section>
-        </div>
+    <div id="page-content" class="row-fluid">
+        <section id="region-main" class="span12">
+            <?php
+            echo $OUTPUT->course_content_header();
+            echo $OUTPUT->main_content();
+            echo $OUTPUT->course_content_footer();
+            ?>
+        </section>
     </div>
 
     <footer id="page-footer">

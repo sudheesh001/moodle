@@ -160,6 +160,10 @@ class phpunit_util extends testing_util {
         $_SERVER = self::get_global_backup('_SERVER');
         $CFG = self::get_global_backup('CFG');
         $SITE = self::get_global_backup('SITE');
+        $_GET = array();
+        $_POST = array();
+        $_FILES = array();
+        $_REQUEST = array();
         $COURSE = $SITE;
 
         // reinitialise following globals
@@ -452,10 +456,10 @@ class phpunit_util extends testing_util {
 
         $suites = '';
 
-        $plugintypes = get_plugin_types();
+        $plugintypes = core_component::get_plugin_types();
         ksort($plugintypes);
         foreach ($plugintypes as $type=>$unused) {
-            $plugs = get_plugin_list($type);
+            $plugs = core_component::get_plugin_list($type);
             ksort($plugs);
             foreach ($plugs as $plug=>$fullplug) {
                 if (!file_exists("$fullplug/tests/")) {

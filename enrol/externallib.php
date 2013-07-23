@@ -426,7 +426,7 @@ class core_enrol_external extends external_api {
         $course = $DB->get_record('course', array('id'=>$courseid), '*', MUST_EXIST);
         $coursecontext = context_course::instance($courseid, IGNORE_MISSING);
         if ($courseid == SITEID) {
-            $context = get_system_context();
+            $context = context_system::instance();
         } else {
             $context = $coursecontext;
         }
@@ -458,8 +458,9 @@ class core_enrol_external extends external_api {
         }
 
         list($enrolledsql, $enrolledparams) = get_enrolled_sql($coursecontext, $withcapability, $groupid, $onlyactive);
-        list($ctxselect, $ctxjoin) = context_instance_preload_sql('u.id', CONTEXT_USER, 'ctx');
-        $sqlparams['courseid'] = $courseid;
+        $ctxselect = ', ' . context_helper::get_preload_record_columns_sql('ctx');
+        $ctxjoin = "LEFT JOIN {context} ctx ON (ctx.instanceid = u.id AND ctx.contextlevel = :contextlevel)";
+        $enrolledparams['contextlevel'] = CONTEXT_USER;
         $sql = "SELECT u.* $ctxselect
                   FROM {user} u $ctxjoin
                  WHERE u.id IN ($enrolledsql)
@@ -467,7 +468,7 @@ class core_enrol_external extends external_api {
         $enrolledusers = $DB->get_recordset_sql($sql, $enrolledparams, $limitfrom, $limitnumber);
         $users = array();
         foreach ($enrolledusers as $user) {
-            context_instance_preload($user);
+            context_helper::preload_from_record($user);
             if ($userdetails = user_get_user_details($user, $course, $userfields)) {
                 $users[] = $userdetails;
             }
@@ -655,7 +656,10 @@ class core_role_external extends external_api {
                         array(
                             'roleid'    => new external_value(PARAM_INT, 'Role to assign to the user'),
                             'userid'    => new external_value(PARAM_INT, 'The user that is going to be assigned'),
-                            'contextid' => new external_value(PARAM_INT, 'The context to unassign the user role from'),
+                            'contextid' => new external_value(PARAM_INT, 'The context to unassign the user role from', VALUE_OPTIONAL),
+                            'contextlevel' => new external_value(PARAM_ALPHA, 'The context level to unassign the user role in
++                                    (block, course, coursecat, system, user, module)', VALUE_OPTIONAL),
+                            'instanceid' => new external_value(PARAM_INT, 'The Instance id of item where the role needs to be unassigned', VALUE_OPTIONAL),
                         )
                     )
                 )
@@ -679,7 +683,7 @@ class core_role_external extends external_api {
 
         foreach ($params['unassignments'] as $unassignment) {
             // Ensure the current user is allowed to run this function in the unassignment context
-            $context = context::instance_by_id($unassignment['contextid'], IGNORE_MISSING);
+            $context = self::get_context_from_params($unassignment);
             self::validate_context($context);
             require_capability('moodle/role:assign', $context);
 
@@ -689,7 +693,7 @@ class core_role_external extends external_api {
                 throw new invalid_parameter_exception('Can not unassign roleid='.$unassignment['roleid'].' in contextid='.$unassignment['contextid']);
             }
 
-            role_unassign($unassignment['roleid'], $unassignment['userid'], $unassignment['contextid']);
+            role_unassign($unassignment['roleid'], $unassignment['userid'], $context->id);
         }
 
         $transaction->allow_commit();

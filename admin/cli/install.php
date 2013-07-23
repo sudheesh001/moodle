@@ -36,6 +36,12 @@ if (isset($_SERVER['REMOTE_ADDR'])) {
     exit(1);
 }
 
+// Force OPcache reset if used, we do not want any stale caches
+// when preparing test environment.
+if (function_exists('opcache_reset')) {
+    opcache_reset();
+}
+
 $help =
 "Command line Moodle installer, creates config.php and initializes database.
 Please note you must execute this script with the same uid as apache
@@ -133,6 +139,8 @@ define('CACHE_DISABLE_ALL', true);
 
 define('PHPUNIT_TEST', false);
 
+define('IGNORE_COMPONENT_CACHE', true);
+
 // Check that PHP is of a sufficient version
 if (version_compare(phpversion(), "5.3.3") < 0) {
     $phpversion = phpversion();
@@ -163,10 +171,10 @@ $CFG->admin                = array_pop($parts);
 ini_set('include_path', $CFG->libdir.'/pear' . PATH_SEPARATOR . ini_get('include_path'));
 
 require_once($CFG->libdir.'/classes/component.php');
+require_once($CFG->libdir.'/classes/text.php');
 require_once($CFG->libdir.'/installlib.php');
 require_once($CFG->libdir.'/clilib.php');
 require_once($CFG->libdir.'/setuplib.php');
-require_once($CFG->libdir.'/textlib.class.php');
 require_once($CFG->libdir.'/weblib.php');
 require_once($CFG->libdir.'/dmllib.php');
 require_once($CFG->libdir.'/moodlelib.php');

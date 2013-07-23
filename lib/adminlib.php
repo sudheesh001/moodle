@@ -115,6 +115,8 @@ define('INSECURE_DATAROOT_ERROR', 2);
 /**
  * Automatically clean-up all plugin data and remove the plugin DB tables
  *
+ * NOTE: do not call directly, use new /admin/plugins.php?uninstall=component instead!
+ *
  * @param string $type The plugin type, eg. 'mod', 'qtype', 'workshopgrading' etc.
  * @param string $name The plugin name, eg. 'forum', 'multichoice', 'accumulative' etc.
  * @uses global $OUTPUT to produce notices and other messages
@@ -126,14 +128,15 @@ function uninstall_plugin($type, $name) {
     // This may take a long time.
     @set_time_limit(0);
 
-    // recursively uninstall all module/editor subplugins first
-    if ($type === 'mod' || $type === 'editor') {
-        $base = get_component_directory($type . '_' . $name);
+    // Recursively uninstall all subplugins first.
+    $subplugintypes = core_component::get_plugin_types_with_subplugins();
+    if (isset($subplugintypes[$type])) {
+        $base = core_component::get_plugin_directory($type, $name);
         if (file_exists("$base/db/subplugins.php")) {
             $subplugins = array();
             include("$base/db/subplugins.php");
             foreach ($subplugins as $subplugintype=>$dir) {
-                $instances = get_plugin_list($subplugintype);
+                $instances = core_component::get_plugin_list($subplugintype);
                 foreach ($instances as $subpluginname => $notusedpluginpath) {
                     uninstall_plugin($subplugintype, $subpluginname);
                 }
@@ -163,7 +166,7 @@ function uninstall_plugin($type, $name) {
 
     echo $OUTPUT->heading($pluginname);
 
-    $plugindirectory = get_plugin_directory($type, $name);
+    $plugindirectory = core_component::get_plugin_directory($type, $name);
     $uninstalllib = $plugindirectory . '/db/uninstall.php';
     if (file_exists($uninstalllib)) {
         require_once($uninstalllib);
@@ -205,9 +208,7 @@ function uninstall_plugin($type, $name) {
         // delete module contexts
         if ($coursemods) {
             foreach ($coursemods as $coursemod) {
-                if (!delete_context(CONTEXT_MODULE, $coursemod->id)) {
-                    echo $OUTPUT->notification("Could not delete the context for $strpluginname with id = $coursemod->id");
-                }
+                context_helper::delete_instance(CONTEXT_MODULE, $coursemod->id);
             }
         }
 
@@ -341,7 +342,7 @@ function uninstall_plugin($type, $name) {
 function get_component_version($component, $source='installed') {
     global $CFG, $DB;
 
-    list($type, $name) = normalize_component($component);
+    list($type, $name) = core_component::normalize_component($component);
 
     // moodle core or a core subsystem
     if ($type === 'core') {
@@ -367,7 +368,7 @@ function get_component_version($component, $source='installed') {
         if ($source === 'installed') {
             return $DB->get_field('modules', 'version', array('name'=>$name));
         } else {
-            $mods = get_plugin_list('mod');
+            $mods = core_component::get_plugin_list('mod');
             if (empty($mods[$name]) or !is_readable($mods[$name].'/version.php')) {
                 return false;
             } else {
@@ -383,7 +384,7 @@ function get_component_version($component, $source='installed') {
         if ($source === 'installed') {
             return $DB->get_field('block', 'version', array('name'=>$name));
         } else {
-            $blocks = get_plugin_list('block');
+            $blocks = core_component::get_plugin_list('block');
             if (empty($blocks[$name]) or !is_readable($blocks[$name].'/version.php')) {
                 return false;
             } else {
@@ -398,7 +399,7 @@ function get_component_version($component, $source='installed') {
     if ($source === 'installed') {
         return get_config($type.'_'.$name, 'version');
     } else {
-        $plugins = get_plugin_list($type);
+        $plugins = core_component::get_plugin_list($type);
         if (empty($plugins[$name])) {
             return false;
         } else {
@@ -493,10 +494,10 @@ function get_db_directories() {
     /// First, the main one (lib/db)
     $dbdirs[] = $CFG->libdir.'/db';
 
-    /// Then, all the ones defined by get_plugin_types()
-    $plugintypes = get_plugin_types();
+    /// Then, all the ones defined by core_component::get_plugin_types()
+    $plugintypes = core_component::get_plugin_types();
     foreach ($plugintypes as $plugintype => $pluginbasedir) {
-        if ($plugins = get_plugin_list($plugintype)) {
+        if ($plugins = core_component::get_plugin_list($plugintype)) {
             foreach ($plugins as $plugin => $plugindir) {
                 $dbdirs[] = $plugindir.'/db';
             }
@@ -3574,7 +3575,7 @@ class admin_setting_sitesetselect extends admin_setting_configselect {
      * @return string empty or error message
      */
     public function write_setting($data) {
-        global $DB, $SITE;
+        global $DB, $SITE, $COURSE;
         if (!in_array($data, array_keys($this->choices))) {
             return get_string('errorsetting', 'admin');
         }
@@ -3583,10 +3584,19 @@ class admin_setting_sitesetselect extends admin_setting_configselect {
         $temp                 = $this->name;
         $record->$temp        = $data;
         $record->timemodified = time();
-        // update $SITE
-        $SITE->{$this->name} = $data;
+
         course_get_format($SITE)->update_course_format_options($record);
-        return ($DB->update_record('course', $record) ? '' : get_string('errorsetting', 'admin'));
+        $DB->update_record('course', $record);
+
+        // Reset caches.
+        $SITE = $DB->get_record('course', array('id'=>$SITE->id), '*', MUST_EXIST);
+        if ($SITE->id == $COURSE->id) {
+            $COURSE = $SITE;
+        }
+        format_base::reset_course_cache($SITE->id);
+
+        return '';
+
     }
 }
 
@@ -3768,17 +3778,22 @@ class admin_setting_sitesetcheckbox extends admin_setting_configcheckbox {
      * @return string empty string or error message
      */
     public function write_setting($data) {
-        global $DB, $SITE;
+        global $DB, $SITE, $COURSE;
         $record = new stdClass();
         $record->id            = $SITE->id;
         $record->{$this->name} = ($data == '1' ? 1 : 0);
         $record->timemodified  = time();
-        // update $SITE
-        $SITE->{$this->name} = $data;
+
         course_get_format($SITE)->update_course_format_options($record);
         $DB->update_record('course', $record);
-        // There is something wrong in cache updates somewhere, let's reset everything.
-        format_base::reset_course_cache();
+
+        // Reset caches.
+        $SITE = $DB->get_record('course', array('id'=>$SITE->id), '*', MUST_EXIST);
+        if ($SITE->id == $COURSE->id) {
+            $COURSE = $SITE;
+        }
+        format_base::reset_course_cache($SITE->id);
+
         return '';
     }
 }
@@ -3825,7 +3840,7 @@ class admin_setting_sitesettext extends admin_setting_configtext {
      * @return string empty or error message
      */
     public function write_setting($data) {
-        global $DB, $SITE;
+        global $DB, $SITE, $COURSE;
         $data = trim($data);
         $validated = $this->validate($data);
         if ($validated !== true) {
@@ -3836,12 +3851,17 @@ class admin_setting_sitesettext extends admin_setting_configtext {
         $record->id            = $SITE->id;
         $record->{$this->name} = $data;
         $record->timemodified  = time();
-        // update $SITE
-        $SITE->{$this->name} = $data;
+
         course_get_format($SITE)->update_course_format_options($record);
         $DB->update_record('course', $record);
-        // There is something wrong in cache updates somewhere, let's reset everything.
-        format_base::reset_course_cache();
+
+        // Reset caches.
+        $SITE = $DB->get_record('course', array('id'=>$SITE->id), '*', MUST_EXIST);
+        if ($SITE->id == $COURSE->id) {
+            $COURSE = $SITE;
+        }
+        format_base::reset_course_cache($SITE->id);
+
         return '';
     }
 }
@@ -3877,16 +3897,22 @@ class admin_setting_special_frontpagedesc extends admin_setting {
      * @return string empty or error message
      */
     public function write_setting($data) {
-        global $DB, $SITE;
+        global $DB, $SITE, $COURSE;
         $record = new stdClass();
         $record->id            = $SITE->id;
         $record->{$this->name} = $data;
         $record->timemodified  = time();
-        $SITE->{$this->name} = $data;
+
         course_get_format($SITE)->update_course_format_options($record);
         $DB->update_record('course', $record);
-        // There is something wrong in cache updates somewhere, let's reset everything.
-        format_base::reset_course_cache();
+
+        // Reset caches.
+        $SITE = $DB->get_record('course', array('id'=>$SITE->id), '*', MUST_EXIST);
+        if ($SITE->id == $COURSE->id) {
+            $COURSE = $SITE;
+        }
+        format_base::reset_course_cache($SITE->id);
+
         return '';
     }
 
@@ -4706,7 +4732,7 @@ class admin_setting_special_gradeexport extends admin_setting_configmulticheckbo
         }
         $this->choices = array();
 
-        if ($plugins = get_plugin_list('gradeexport')) {
+        if ($plugins = core_component::get_plugin_list('gradeexport')) {
             foreach($plugins as $plugin => $unused) {
                 $this->choices[$plugin] = get_string('pluginname', 'gradeexport_'.$plugin);
             }
@@ -4876,7 +4902,7 @@ class admin_setting_grade_profilereport extends admin_setting_configselect {
         global $CFG;
         require_once($CFG->libdir.'/gradelib.php');
 
-        foreach (get_plugin_list('gradereport') as $plugin => $plugindir) {
+        foreach (core_component::get_plugin_list('gradereport') as $plugin => $plugindir) {
             if (file_exists($plugindir.'/lib.php')) {
                 require_once($plugindir.'/lib.php');
                 $functionname = 'grade_report_'.$plugin.'_profilereport';
@@ -5102,7 +5128,7 @@ class admin_setting_manageenrols extends admin_setting {
         $strsettings  = get_string('settings');
         $strenable    = get_string('enable');
         $strdisable   = get_string('disable');
-        $struninstall = get_string('uninstallplugin', 'admin');
+        $struninstall = get_string('uninstallplugin', 'core_admin');
         $strusage     = get_string('enrolusage', 'enrol');
         $strversion   = get_string('version');
 
@@ -5205,18 +5231,16 @@ class admin_setting_manageenrols extends admin_setting {
             // Add settings link.
             if (!$version) {
                 $settings = '';
-            } else if ($url = $plugininfo->get_settings_url()) {
-                $settings = html_writer::link($url, $strsettings);
+            } else if ($surl = $plugininfo->get_settings_url()) {
+                $settings = html_writer::link($surl, $strsettings);
             } else {
                 $settings = '';
             }
 
             // Add uninstall info.
-            if ($version) {
-                $url = new moodle_url($plugininfo->get_uninstall_url(), array('return'=>'settings'));
-                $uninstall = html_writer::link($url, $struninstall);
-            } else {
-                $uninstall = '';
+            $uninstall = '';
+            if ($uninstallurl = plugin_manager::instance()->get_uninstall_url('enrol_'.$enrol)) {
+                $uninstall = html_writer::link($uninstallurl, $struninstall);
             }
 
             // Add a row to the table.
@@ -5387,7 +5411,7 @@ class admin_page_manageqbehaviours extends admin_externalpage {
 
         $found = false;
         require_once($CFG->dirroot . '/question/engine/lib.php');
-        foreach (get_plugin_list('qbehaviour') as $behaviour => $notused) {
+        foreach (core_component::get_plugin_list('qbehaviour') as $behaviour => $notused) {
             if (strpos(textlib::strtolower(question_engine::get_behaviour_name($behaviour)),
                     $query) !== false) {
                 $found = true;
@@ -5475,7 +5499,7 @@ class admin_page_manageportfolios extends admin_externalpage {
         }
 
         $found = false;
-        $portfolios = get_plugin_list('portfolio');
+        $portfolios = core_component::get_plugin_list('portfolio');
         foreach ($portfolios as $p => $dir) {
             if (strpos($p, $query) !== false) {
                 $found = true;
@@ -5526,7 +5550,7 @@ class admin_page_managerepositories extends admin_externalpage {
         }
 
         $found = false;
-        $repositories= get_plugin_list('repository');
+        $repositories= core_component::get_plugin_list('repository');
         foreach ($repositories as $p => $dir) {
             if (strpos($p, $query) !== false) {
                 $found = true;
@@ -5608,7 +5632,7 @@ class admin_setting_manageauths extends admin_setting {
             return true;
         }
 
-        $authsavailable = get_plugin_list('auth');
+        $authsavailable = core_component::get_plugin_list('auth');
         foreach ($authsavailable as $auth => $dir) {
             if (strpos($auth, $query) !== false) {
                 return true;
@@ -5639,7 +5663,7 @@ class admin_setting_manageauths extends admin_setting {
             'up', 'down', 'none'));
         $txt->updown = "$txt->up/$txt->down";
 
-        $authsavailable = get_plugin_list('auth');
+        $authsavailable = core_component::get_plugin_list('auth');
         get_enabled_auth_plugins(true); // fix the list of enabled auths
         if (empty($CFG->auth)) {
             $authsenabled = array();
@@ -5836,7 +5860,7 @@ class admin_setting_manageeditors extends admin_setting {
         // display strings
         $txt = get_strings(array('administration', 'settings', 'edit', 'name', 'enable', 'disable',
             'up', 'down', 'none'));
-        $struninstall = get_string('uninstallplugin', 'admin');
+        $struninstall = get_string('uninstallplugin', 'core_admin');
 
         $txt->updown = "$txt->up/$txt->down";
 
@@ -5916,11 +5940,9 @@ class admin_setting_manageeditors extends admin_setting {
                 $settings = '';
             }
 
-            if ($editor === 'textarea') {
-                $uninstall = '';
-            } else {
-                $uurl = new moodle_url('/admin/editors.php', array('action'=>'uninstall', 'editor'=>$editor, 'sesskey'=>sesskey()));
-                $uninstall = html_writer::link($uurl, $struninstall);
+            $uninstall = '';
+            if ($uninstallurl = plugin_manager::instance()->get_uninstall_url('editor_'.$editor)) {
+                $uninstall = html_writer::link($uninstallurl, $struninstall);
             }
 
             // add a row to the table
@@ -6107,11 +6129,12 @@ class admin_setting_manageformats extends admin_setting {
         $formats = plugin_manager::instance()->get_plugins_of_type('format');
 
         // display strings
-        $txt = get_strings(array('settings', 'name', 'enable', 'disable', 'up', 'down', 'default', 'delete'));
+        $txt = get_strings(array('settings', 'name', 'enable', 'disable', 'up', 'down', 'default'));
+        $txt->uninstall = get_string('uninstallplugin', 'core_admin');
         $txt->updown = "$txt->up/$txt->down";
 
         $table = new html_table();
-        $table->head  = array($txt->name, $txt->enable, $txt->updown, $txt->delete, $txt->settings);
+        $table->head  = array($txt->name, $txt->enable, $txt->updown, $txt->uninstall, $txt->settings);
         $table->align = array('left', 'center', 'center', 'center', 'center');
         $table->width = '90%';
         $table->attributes['class'] = 'manageformattable generaltable';
@@ -6156,8 +6179,8 @@ class admin_setting_manageformats extends admin_setting {
                 $settings = html_writer::link($format->get_settings_url(), $txt->settings);
             }
             $uninstall = '';
-            if ($defaultformat !== $format->name) {
-                $uninstall = html_writer::link($format->get_uninstall_url(), $txt->delete);
+            if ($uninstallurl = plugin_manager::instance()->get_uninstall_url('format_'.$format->name)) {
+                $uninstall = html_writer::link($uninstallurl, $txt->uninstall);
             }
             $table->data[] =array($strformatname, $hideshow, $updown, $uninstall, $settings);
         }
@@ -6318,10 +6341,10 @@ function admin_externalpage_setup($section, $extrabutton = '', array $extraurlpa
     if ($PAGE->user_allowed_editing()) {
         if ($PAGE->user_is_editing()) {
             $caption = get_string('blockseditoff');
-            $url = new moodle_url($PAGE->url, array('adminedit'=>'0'));
+            $url = new moodle_url($PAGE->url, array('adminedit'=>'0', 'sesskey'=>sesskey()));
         } else {
             $caption = get_string('blocksediton');
-            $url = new moodle_url($PAGE->url, array('adminedit'=>'1'));
+            $url = new moodle_url($PAGE->url, array('adminedit'=>'1', 'sesskey'=>sesskey()));
         }
         $PAGE->set_button($OUTPUT->single_button($url, $caption, 'get'));
     }
@@ -6759,7 +6782,7 @@ function db_replace($search, $replace) {
     rebuild_course_cache(0, true);
 
     // TODO: we should ask all plugins to do the search&replace, for now let's do only blocks...
-    $blocks = get_plugin_list('block');
+    $blocks = core_component::get_plugin_list('block');
     foreach ($blocks as $blockname=>$fullblock) {
         if ($blockname === 'NEWBLOCK') {   // Someone has unzipped the template, ignore it
             continue;
@@ -6852,7 +6875,7 @@ class admin_setting_managerepository extends admin_setting {
             return true;
         }
 
-        $repositories= get_plugin_list('repository');
+        $repositories= core_component::get_plugin_list('repository');
         foreach ($repositories as $p => $dir) {
             if (strpos($p, $query) !== false) {
                 return true;
@@ -6934,7 +6957,7 @@ class admin_setting_managerepository extends admin_setting {
                     // Calculate number of instances in order to display them for the Moodle administrator
                     if (!empty($instanceoptionnames)) {
                         $params = array();
-                        $params['context'] = array(get_system_context());
+                        $params['context'] = array(context_system::instance());
                         $params['onlyvisible'] = false;
                         $params['type'] = $typename;
                         $admininstancenumber = count(repository::static_function($typename, 'get_instances', $params));
@@ -7017,7 +7040,7 @@ class admin_setting_managerepository extends admin_setting {
         }
 
         // Get all the plugins that exist on disk
-        $plugins = get_plugin_list('repository');
+        $plugins = core_component::get_plugin_list('repository');
         if (!empty($plugins)) {
             foreach ($plugins as $plugin => $dir) {
                 // Check that it has not already been listed
@@ -7092,7 +7115,7 @@ class admin_setting_enablemobileservice extends admin_setting_configcheckbox {
             $assign = true;
         }
         if (!empty($assign)) {
-            $systemcontext = get_system_context();
+            $systemcontext = context_system::instance();
             assign_capability('webservice/xmlrpc:use', $permission, $CFG->defaultuserroleid, $systemcontext->id, true);
             assign_capability('webservice/rest:use', $permission, $CFG->defaultuserroleid, $systemcontext->id, true);
         }
@@ -7761,7 +7784,7 @@ class admin_setting_managewebserviceprotocols extends admin_setting {
             return true;
         }
 
-        $protocols = get_plugin_list('webservice');
+        $protocols = core_component::get_plugin_list('webservice');
         foreach ($protocols as $protocol=>$location) {
             if (strpos($protocol, $query) !== false) {
                 return true;
@@ -7793,7 +7816,7 @@ class admin_setting_managewebserviceprotocols extends admin_setting {
         $strdisable = get_string('disable');
         $strversion = get_string('version');
 
-        $protocols_available = get_plugin_list('webservice');
+        $protocols_available = core_component::get_plugin_list('webservice');
         $active_protocols = empty($CFG->webserviceprotocols) ? array() : explode(',', $CFG->webserviceprotocols);
         ksort($protocols_available);
 

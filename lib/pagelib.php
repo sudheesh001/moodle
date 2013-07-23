@@ -819,7 +819,7 @@ class moodle_page {
         $summary = '';
         $summary .= 'General type: ' . $this->pagelayout . '. ';
         if (!during_initial_install()) {
-            $summary .= 'Context ' . print_context_name($this->_context) . ' (context id ' . $this->_context->id . '). ';
+            $summary .= 'Context ' . $this->context->get_context_name() . ' (context id ' . $this->_context->id . '). ';
         }
         $summary .= 'Page type ' . $this->pagetype .  '. ';
         if ($this->subpage) {
@@ -899,7 +899,7 @@ class moodle_page {
     /**
      * Set the main context to which this page belongs.
      *
-     * @param context $context a context object, normally obtained with get_context_instance.
+     * @param context $context a context object. You normally get this with context_xxxx::instance().
      */
     public function set_context($context) {
         if ($context === null) {
@@ -917,7 +917,8 @@ class moodle_page {
                 // fine - no change needed
             } else if ($this->_context->contextlevel == CONTEXT_SYSTEM or $this->_context->contextlevel == CONTEXT_COURSE) {
                 // hmm - not ideal, but it might produce too many warnings due to the design of require_login
-            } else if ($this->_context->contextlevel == CONTEXT_MODULE and $this->_context->id == get_parent_contextid($context)) {
+            } else if ($this->_context->contextlevel == CONTEXT_MODULE and ($parentcontext = $context->get_parent_context()) and
+                    $this->_context->id == $parentcontext->id) {
                 // hmm - most probably somebody did require_login() and after that set the block context
             } else {
                 // we do not want devs to do weird switching of context levels on the fly,
@@ -1443,7 +1444,7 @@ class moodle_page {
      * @return void
      */
     public function initialise_theme_and_output() {
-        global $OUTPUT, $PAGE, $SITE;
+        global $OUTPUT, $PAGE, $SITE, $CFG;
 
         if (!empty($this->_wherethemewasinitialised)) {
             return;
@@ -1464,6 +1465,11 @@ class moodle_page {
         }
 
         $this->_theme->setup_blocks($this->pagelayout, $this->blocks);
+        if ($this->_theme->enable_dock && !empty($CFG->allowblockstodock)) {
+            $this->requires->strings_for_js(array('addtodock', 'undockitem', 'dockblock', 'undockblock', 'undockall', 'hidedockpanel', 'hidepanel'), 'block');
+            $this->requires->string_for_js('thisdirectionvertical', 'langconfig');
+            $this->requires->yui_module('moodle-core-dockloader', 'M.core.dock.loader.initLoader');
+        }
 
         if ($this === $PAGE) {
             $OUTPUT = $this->get_renderer('core');
@@ -1852,7 +1858,14 @@ class moodle_page {
      */
     public function apply_theme_region_manipulations($region) {
         if ($this->blockmanipulations && isset($this->blockmanipulations[$region])) {
-            return $this->blockmanipulations[$region];
+            $regionwas = $region;
+            $regionnow = $this->blockmanipulations[$region];
+            if ($this->blocks->is_known_region($regionwas) && $this->blocks->is_known_region($regionnow)) {
+                // Both the before and after regions are known so we can swap them over.
+                return $regionnow;
+            }
+            // We didn't know about both, we won't swap them over.
+            return $regionwas;
         }
         return $region;
     }

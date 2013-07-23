@@ -17,6 +17,7 @@
 // Get the HTML for the settings bits.
 $html = theme_clean_get_html_for_settings($OUTPUT, $PAGE);
 
+$left = (!right_to_left());  // To know if to add 'pull-right' and 'desktop-first-column' classes in the layout for LTR.
 echo $OUTPUT->doctype() ?>
 <html <?php echo $OUTPUT->htmlattributes(); ?>>
 <head>
@@ -53,9 +54,9 @@ echo $OUTPUT->doctype() ?>
 <div id="page" class="container-fluid">
 
     <header id="page-header" class="clearfix">
-        <div id="page-navbar">
+        <div id="page-navbar" class="clearfix">
+            <div class="breadcrumb-nav"><?php echo $OUTPUT->navbar(); ?></div>
             <nav class="breadcrumb-button"><?php echo $OUTPUT->page_heading_button(); ?></nav>
-            <?php echo $OUTPUT->navbar(); ?>
         </div>
         <?php echo $html->heading; ?>
         <div id="course-header">
@@ -64,25 +65,19 @@ echo $OUTPUT->doctype() ?>
     </header>
 
     <div id="page-content" class="row-fluid">
-        <div id="region-bs-main-and-pre" class="span9">
-            <div class="row-fluid">
-                <section id="region-main" class="span9 pull-right">
-                    <?php
-                    echo $OUTPUT->course_content_header();
-                    echo $OUTPUT->main_content();
-                    echo $OUTPUT->course_content_footer();
-                    ?>
-                </section>
-                <?php
-                if (!right_to_left()) {
-                    echo $OUTPUT->blocks('side-pre', 'span3 desktop-first-column');
-                } ?>
-            </div>
-        </div>
+        <section id="region-main" class="span9<?php if ($left) { echo ' pull-right'; } ?>">
+            <?php
+            echo $OUTPUT->course_content_header();
+            echo $OUTPUT->main_content();
+            echo $OUTPUT->course_content_footer();
+            ?>
+        </section>
         <?php
-        if (right_to_left()) {
-            echo $OUTPUT->blocks('side-post', 'span3');
+        $classextra = '';
+        if ($left) {
+            $classextra = ' desktop-first-column';
         }
+        echo $OUTPUT->blocks('side-pre', 'span3'.$classextra);
         ?>
     </div>
 

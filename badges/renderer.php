@@ -527,7 +527,7 @@ class core_badges_renderer extends plugin_renderer_base {
             $description = $badge->description;
             $criteria = self::print_badge_criteria($badge);
             if ($badge->dateissued) {
-                $icon = new pix_icon('i/tick_green_big',
+                $icon = new pix_icon('i/valid',
                             get_string('dateearned', 'badges',
                                 userdate($badge->dateissued, get_string('strftimedatefullshort', 'core_langconfig'))));
                 $badgeurl = new moodle_url('/badges/badge.php', array('hash' => $badge->uniquehash));
@@ -549,9 +549,12 @@ class core_badges_renderer extends plugin_renderer_base {
         $paging = new paging_bar($badges->totalcount, $badges->page, $badges->perpage, $this->page->url, 'page');
 
         // New badge button.
-        $n['type'] = $this->page->url->get_param('type');
-        $n['id'] = $this->page->url->get_param('id');
-        $htmlnew = $this->output->single_button(new moodle_url('newbadge.php', $n), get_string('newbadge', 'badges'));
+        $htmlnew = '';
+        if (has_capability('moodle/badges:createbadge', $this->page->context)) {
+            $n['type'] = $this->page->url->get_param('type');
+            $n['id'] = $this->page->url->get_param('id');
+            $htmlnew = $this->output->single_button(new moodle_url('newbadge.php', $n), get_string('newbadge', 'badges'));
+        }
 
         $htmlpagingbar = $this->render($paging);
         $table = new html_table();

@@ -131,7 +131,8 @@ class user_picture implements renderable {
      * @var array List of mandatory fields in user record here. (do not include
      * TEXT columns because it would break SELECT DISTINCT in MSSQL and ORACLE)
      */
-    protected static $fields = array('id', 'picture', 'firstname', 'lastname', 'imagealt', 'email');
+    protected static $fields = array('id', 'picture', 'firstname', 'lastname', 'firstnamephonetic', 'lastnamephonetic',
+            'middlename', 'alternatename', 'imagealt', 'email');
 
     /**
      * @var stdClass A user object with at least fields all columns specified
@@ -224,7 +225,6 @@ class user_picture implements renderable {
         if ($tableprefix) {
             $tableprefix .= '.';
         }
-        $fields = array();
         foreach (self::$fields as $field) {
             if ($field === 'id' and $idalias and $idalias !== 'id') {
                 $fields[$field] = "$tableprefix$field AS $idalias";
@@ -1347,15 +1347,12 @@ class html_writer {
      * @return string
      */
     public static function alist(array $items, array $attributes = null, $tag = 'ul') {
-        $output = '';
-
+        $output = html_writer::start_tag($tag, $attributes)."\n";
         foreach ($items as $item) {
-            $output .= html_writer::start_tag('li') . "\n";
-            $output .= $item . "\n";
-            $output .= html_writer::end_tag('li') . "\n";
+            $output .= html_writer::tag('li', $item)."\n";
         }
-
-        return html_writer::tag($tag, $output, $attributes);
+        $output .= html_writer::end_tag($tag);
+        return $output;
     }
 
     /**
@@ -2437,6 +2434,12 @@ class block_contents {
      * the user can toggle whether this block is visible.
      */
     public $collapsible = self::NOT_HIDEABLE;
+
+    /**
+     * Set this to true if the block is dockable.
+     * @var bool
+     */
+    public $dockable = false;
 
     /**
      * @var array A (possibly empty) array of editing controls. Each element of

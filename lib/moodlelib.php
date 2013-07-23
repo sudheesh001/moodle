@@ -1468,6 +1468,7 @@ function unset_config($name, $plugin=NULL) {
 
 /**
  * Remove all the config variables for a given plugin.
+ * NOTE: this function is called from lib/db/upgrade.php
  *
  * @param string $plugin a plugin, for example 'quiz' or 'qtype_multichoice';
  * @return boolean whether the operation succeeded.
@@ -3558,7 +3559,7 @@ function ismoving($courseid) {
 /**
  * Returns a persons full name
  *
- * Given an object containing firstname and lastname
+ * Given an object containing all of the users name
  * values, this function returns a string with the
  * full name of the person.
  * The result may depend on system settings
@@ -3567,7 +3568,7 @@ function ismoving($courseid) {
  *
  * @global object
  * @global object
- * @param object $user A {@link $USER} object to get full name of
+ * @param object $user A {@link $USER} object to get full name of.
  * @param bool $override If true then the name will be first name followed by last name rather than adhering to fullnamedisplay setting.
  * @return string
  */
@@ -3591,21 +3592,114 @@ function fullname($user, $override=false) {
         $CFG->fullnamedisplay = $SESSION->fullnamedisplay;
     }
 
-    if (!isset($CFG->fullnamedisplay) or $CFG->fullnamedisplay === 'firstname lastname') {
-        return $user->firstname .' '. $user->lastname;
+    $template = null;
+    // If the fullnamedisplay setting is available, set the template to that.
+    if (isset($CFG->fullnamedisplay)) {
+        $template = $CFG->fullnamedisplay;
+    }
+    // If the template is empty, or set to language, or $override is set, return the language string.
+    if (empty($template) || $template == 'language' || $override) {
+        return get_string('fullnamedisplay', null, $user);
+    }
 
-    } else if ($CFG->fullnamedisplay == 'lastname firstname') {
-        return $user->lastname .' '. $user->firstname;
-
-    } else if ($CFG->fullnamedisplay == 'firstname') {
-        if ($override) {
-            return get_string('fullnamedisplay', '', $user);
-        } else {
-            return $user->firstname;
+    // Get all of the name fields.
+    $allnames = get_all_user_name_fields();
+    $requirednames = array();
+    // With each name, see if it is in the display name template, and add it to the required names array if it is.
+    foreach ($allnames as $allname) {
+        if (strpos($template, $allname) !== false) {
+            $requirednames[] = $allname;
+            // If the field is in the template, but not set in the user object, then notify the programmer that it needs to be fixed.
+            if (!array_key_exists($allname, $user)) {
+                debugging('You need to update your sql query to include additional name fields in the user object.', DEBUG_DEVELOPER);
+            }
         }
     }
 
-    return get_string('fullnamedisplay', '', $user);
+    $displayname = $template;
+    // Switch in the actual data into the template.
+    foreach ($requirednames as $altname) {
+        if (isset($user->$altname)) {
+            // Using empty() on the below if statement causes breakages.
+            if ((string)$user->$altname == '') {
+                $displayname = str_replace($altname, 'EMPTY', $displayname);
+            } else {
+                $displayname = str_replace($altname, $user->$altname, $displayname);
+            }
+        } else {
+            $displayname = str_replace($altname, 'EMPTY', $displayname);
+        }
+    }
+    // Tidy up any misc. characters (Not perfect, but gets most characters).
+    // Don't remove the "u" at the end of the first expression unless you want garbled characters when combining hiragana or katakana and parenthesis.
+    $patterns = array();
+    // This regular expression replacement is to fix problems such as 'James () Kirk' Where 'Tiberius' (middlename) has not been filled in by a user.
+    // The special characters are Japanese brackets that are common enough to make special allowance for them (not covered by :punct:).
+    $patterns[] = '/[[:punct:]「」]*EMPTY[[:punct:]「」]*/u';
+    // This regular expression is to remove any double spaces in the display name.
+    $patterns[] = '/\s{2,}/';
+    foreach ($patterns as $pattern) {
+        $displayname = preg_replace($pattern, ' ', $displayname);
+    }
+
+    // Trimming $displayname will help the next check to ensure that we don't have a display name with spaces.
+    $displayname = trim($displayname);
+    if (empty($displayname)) {
+        // Going with just the first name if no alternate fields are filled out. May be changed later depending on what
+        // people in general feel is a good setting to fall back on.
+        $displayname = $user->firstname;
+    }
+    return $displayname;
+}
+
+/**
+ * A centralised location for the all name fields. Returns an array / sql string snippet.
+ *
+ * @param bool $returnsql True for an sql select field snippet.
+ * @param string $alias table alias to use in front of each field.
+ * @return array|string All name fields.
+ */
+function get_all_user_name_fields($returnsql = false, $alias = null) {
+    $alternatenames = array('firstnamephonetic',
+                            'lastnamephonetic',
+                            'middlename',
+                            'alternatename',
+                            'firstname',
+                            'lastname',);
+    if ($returnsql) {
+        if ($alias) {
+            foreach ($alternatenames as $key => $altname) {
+                $alternatenames[$key] = "$alias.$altname";
+            }
+        }
+        $alternatenames = implode(',', $alternatenames);
+    }
+    return $alternatenames;
+}
+
+/**
+ * Returns an array of values in order of occurance in a provided string.
+ * The key in the result is the character postion in the string.
+ *
+ * @param array $values Values to be found in the string format
+ * @param string $stringformat The string which may contain values being searched for.
+ * @return array An array of values in order according to placement in the string format.
+ */
+function order_in_string($values, $stringformat) {
+    $valuearray = array();
+    foreach ($values as $value) {
+        $pattern = "/$value\b/";
+        // Using preg_match as strpos() may match values that are similar e.g. firstname and firstnamephonetic.
+        if (preg_match($pattern, $stringformat)) {
+            $replacement = "thing";
+            // replace the value with something more unique to ensure we get the right position when using strpos().
+            $newformat = preg_replace($pattern, $replacement, $stringformat);
+            $position = strpos($newformat, $replacement);
+            $valuearray[$position] = $value;
+        }
+    }
+    ksort($valuearray);
+    return $valuearray;
 }
 
 /**
@@ -4098,7 +4192,7 @@ function delete_user(stdClass $user) {
     session_kill_user($user->id);
 
     // now do a final accesslib cleanup - removes all role assignments in user context and context itself
-    delete_context(CONTEXT_USER, $user->id);
+    context_helper::delete_instance(CONTEXT_USER, $user->id);
 
     // workaround for bulk deletes of users with the same email address
     $delname = "$user->email.".time();
@@ -4744,7 +4838,7 @@ function delete_course($courseorid, $showfeedback = true) {
     remove_course_contents($courseid, $showfeedback);
 
     // delete the course and related context instance
-    delete_context(CONTEXT_COURSE, $courseid);
+    context_helper::delete_instance(CONTEXT_COURSE, $courseid);
 
     // We will update the course's timemodified, as it will be passed to the course_deleted event,
     // which should know about this updated property, as this event is meant to pass the full course record
@@ -5137,23 +5231,23 @@ function reset_course_userdata($data) {
     $componentstr = get_string('roles');
 
     if (!empty($data->reset_roles_overrides)) {
-        $children = get_child_contexts($context);
+        $children = $context->get_child_contexts();
         foreach ($children as $child) {
             $DB->delete_records('role_capabilities', array('contextid'=>$child->id));
         }
         $DB->delete_records('role_capabilities', array('contextid'=>$context->id));
         //force refresh for logged in users
-        mark_context_dirty($context->path);
+        $context->mark_dirty();
         $status[] = array('component'=>$componentstr, 'item'=>get_string('deletecourseoverrides', 'role'), 'error'=>false);
     }
 
     if (!empty($data->reset_roles_local)) {
-        $children = get_child_contexts($context);
+        $children = $context->get_child_contexts();
         foreach ($children as $child) {
             role_unassign_all(array('contextid'=>$child->id));
         }
         //force refresh for logged in users
-        mark_context_dirty($context->path);
+        $context->mark_dirty();
         $status[] = array('component'=>$componentstr, 'item'=>get_string('deletelocalroles', 'role'), 'error'=>false);
     }
 
@@ -6070,6 +6164,7 @@ function get_file_packer($mimetype='application/zip') {
     switch ($mimetype) {
         case 'application/zip':
         case 'application/vnd.moodle.backup':
+        case 'application/vnd.moodle.profiling':
             $classname = 'zip_packer';
             break;
         case 'application/x-tar':
@@ -7215,6 +7310,11 @@ class core_string_manager implements string_manager {
         // and re-populate it again
         fulldelete($this->menucache);
         $this->get_list_of_translations(true);
+
+        // Lang packs use PHP files in dataroot, it is better to invalidate opcode caches.
+        if (function_exists('opcache_reset')) {
+            opcache_reset();
+        }
     }
 
     /**
@@ -8115,7 +8215,7 @@ function get_plugin_list_with_function($plugintype, $function, $file = 'lib.php'
  * Lists plugin-like directories within specified directory
  *
  * This function was originally used for standard Moodle plugins, please use
- * new get_plugin_list() now.
+ * new core_component::get_plugin_list() now.
  *
  * This function is used for general directory listing and backwards compatility.
  *

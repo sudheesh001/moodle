@@ -446,6 +446,9 @@ class block_manager {
             throw new coding_exception('block_manager has already prepared the blocks in region ' .
                     $region . 'for output. It is too late to add a fake block.');
         }
+        if (!isset($bc->attributes['data-block'])) {
+            $bc->attributes['data-block'] = '_fake';
+        }
         $this->extracontent[$region][] = $bc;
     }
 
@@ -566,7 +569,7 @@ class block_manager {
         $context = $this->page->context;
         $contexttest = 'bi.parentcontextid = :contextid2';
         $parentcontextparams = array();
-        $parentcontextids = get_parent_contexts($context);
+        $parentcontextids = $context->get_parent_context_ids();
         if ($parentcontextids) {
             list($parentcontexttest, $parentcontextparams) =
                     $DB->get_in_or_equal($parentcontextids, SQL_PARAMS_NAMED, 'parentcontext');
@@ -577,9 +580,11 @@ class block_manager {
         list($pagetypepatterntest, $pagetypepatternparams) =
                 $DB->get_in_or_equal($pagetypepatterns, SQL_PARAMS_NAMED, 'pagetypepatterntest');
 
-        list($ccselect, $ccjoin) = context_instance_preload_sql('bi.id', CONTEXT_BLOCK, 'ctx');
+        $ccselect = ', ' . context_helper::get_preload_record_columns_sql('ctx');
+        $ccjoin = "LEFT JOIN {context} ctx ON (ctx.instanceid = bi.id AND ctx.contextlevel = :contextlevel)";
 
         $params = array(
+            'contextlevel' => CONTEXT_BLOCK,
             'subpage1' => $this->page->subpage,
             'subpage2' => $this->page->subpage,
             'contextid1' => $context->id,
@@ -630,7 +635,7 @@ class block_manager {
         $this->birecordsbyregion = $this->prepare_per_region_arrays();
         $unknown = array();
         foreach ($blockinstances as $bi) {
-            context_instance_preload($bi);
+            context_helper::preload_from_record($bi);
             if ($this->is_known_region($bi->region)) {
                 $this->birecordsbyregion[$bi->region][] = $bi;
             } else {
@@ -1860,6 +1865,7 @@ function block_add_block_ui($page, $output) {
     $bc = new block_contents();
     $bc->title = get_string('addblock');
     $bc->add_class('block_adminblock');
+    $bc->attributes['data-block'] = 'adminblock';
 
     $missingblocks = $page->blocks->get_addable_blocks();
     if (empty($missingblocks)) {
@@ -1981,7 +1987,7 @@ function blocks_delete_instance($instance, $nolongerused = false, $skipblockstab
     if ($block = block_instance($instance->blockname, $instance)) {
         $block->instance_delete();
     }
-    delete_context(CONTEXT_BLOCK, $instance->id);
+    context_helper::delete_instance(CONTEXT_BLOCK, $instance->id);
 
     if (!$skipblockstables) {
         $DB->delete_records('block_positions', array('blockinstanceid' => $instance->id));

@@ -298,8 +298,9 @@ class moodle_url {
      *      $params instead. For admin URLs, just use /admin/script.php, this
      *      class takes care of the $CFG->admin issue.
      * @param array $params these params override current params or add new
+     * @param string $anchor The anchor to use as part of the URL if there is one.
      */
-    public function __construct($url, array $params = null) {
+    public function __construct($url, array $params = null, $anchor = null) {
         global $CFG;
 
         if ($url instanceof moodle_url) {
@@ -361,6 +362,9 @@ class moodle_url {
         }
 
         $this->params($params);
+        if ($anchor !== null) {
+            $this->anchor = (string)$anchor;
+        }
     }
 
     /**
@@ -1091,7 +1095,7 @@ function format_text($text, $format = FORMAT_MOODLE, $options = NULL, $courseid_
     }
 
     // Calculate best context
-    if (empty($CFG->version) or $CFG->version < 2010072800 or during_initial_install()) {
+    if (empty($CFG->version) or $CFG->version < 2013051400 or during_initial_install()) {
         // do not filter anything during installation or before upgrade completes
         $context = null;
 
@@ -1296,7 +1300,7 @@ function format_string($string, $striplinks = true, $options = NULL) {
     //We'll use a in-memory cache here to speed up repeated strings
     static $strcache = false;
 
-    if (empty($CFG->version) or $CFG->version < 2010072800 or during_initial_install()) {
+    if (empty($CFG->version) or $CFG->version < 2013051400 or during_initial_install()) {
         // do not filter anything during installation or before upgrade completes
         return $string = strip_tags($string);
     }

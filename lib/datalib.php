@@ -177,14 +177,17 @@ function search_users($courseid, $groupid, $searchtext, $sort='', array $excepti
 
         } else {
             $context = context_course::instance($courseid);
-            $contextlists = get_related_contexts_string($context);
+
+            // We want to query both the current context and parent contexts.
+            list($relatedctxsql, $relatedctxparams) = $DB->get_in_or_equal($context->get_parent_context_ids(true), SQL_PARAMS_NAMED, 'relatedctx');
 
             $sql = "SELECT u.id, u.firstname, u.lastname, u.email
                       FROM {user} u
                       JOIN {role_assignments} ra ON ra.userid = u.id
-                     WHERE $select AND ra.contextid $contextlists
+                     WHERE $select AND ra.contextid $relatedctxsql
                            $except
                     $order";
+            $params = array_merge($params, $relatedctxparams);
             return $DB->get_records_sql($sql, $params);
         }
     }
@@ -1639,14 +1642,14 @@ function add_to_log($courseid, $module, $action, $url='', $info='', $cm=0, $user
     // database so that it doesn't cause a DB error. Log a warning so that
     // developers can avoid doing things which are likely to cause this on a
     // routine basis.
-    if(!empty($info) && textlib::strlen($info)>255) {
-        $info = textlib::substr($info,0,252).'...';
+    if(!empty($info) && core_text::strlen($info)>255) {
+        $info = core_text::substr($info,0,252).'...';
         debugging('Warning: logged very long info',DEBUG_DEVELOPER);
     }
 
     // If the 100 field size is changed, also need to alter print_log in course/lib.php
-    if(!empty($url) && textlib::strlen($url)>100) {
-        $url = textlib::substr($url,0,97).'...';
+    if(!empty($url) && core_text::strlen($url)>100) {
+        $url = core_text::substr($url,0,97).'...';
         debugging('Warning: logged very long URL',DEBUG_DEVELOPER);
     }
 

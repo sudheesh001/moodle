@@ -233,8 +233,8 @@ function report_log_print_mnet_selector_form($hostid, $course, $selecteduser=0, 
             }
             $section = $cm->sectionnum;
             $modname = strip_tags($cm->get_formatted_name());
-            if (textlib::strlen($modname) > 55) {
-                $modname = textlib::substr($modname, 0, 50)."...";
+            if (core_text::strlen($modname) > 55) {
+                $modname = core_text::substr($modname, 0, 50)."...";
             }
             if (!$cm->visible) {
                 $modname = "(".$modname.")";
@@ -349,6 +349,7 @@ function report_log_print_mnet_selector_form($hostid, $course, $selecteduser=0, 
         }
         echo html_writer::label(get_string('participantslist'), 'menuuser', false, array('class' => 'accesshide'));
         echo html_writer::select($users, "user", $selecteduser, false);
+        $a = new stdClass();
         $a->url = "$CFG->wwwroot/report/log/index.php?chooselog=0&group=$selectedgroup&user=$selecteduser"
             ."&id=$course->id&date=$selecteddate&modid=$selectedactivity&showusers=1&showcourses=$showcourses";
         print_string('logtoomanyusers','moodle',$a);
@@ -486,8 +487,8 @@ function report_log_print_selector_form($course, $selecteduser=0, $selecteddate=
             }
             $section = $cm->sectionnum;
             $modname = strip_tags($cm->get_formatted_name());
-            if (textlib::strlen($modname) > 55) {
-                $modname = textlib::substr($modname, 0, 50)."...";
+            if (core_text::strlen($modname) > 55) {
+                $modname = core_text::substr($modname, 0, 50)."...";
             }
             if (!$cm->visible) {
                 $modname = "(".$modname.")";

@@ -658,7 +658,7 @@ class page_requirements_manager {
                                                         array('nofilesavailable', 'repository'), array('norepositoriesavailable', 'repository'),
                                                         array('fileexistsdialogheader', 'repository'), array('fileexistsdialog_editor', 'repository'),
                                                         array('fileexistsdialog_filemanager', 'repository'), array('renameto', 'repository'),
-                                                        array('referencesexist', 'repository')
+                                                        array('referencesexist', 'repository'), array('select', 'repository')
                                                     ));
                     break;
                 case 'core_comment':
@@ -1571,7 +1571,7 @@ class YUI_config {
             $configfn = $cache->get($keyname);
             if ($configfn === false) {
                 require_once($CFG->libdir . '/jslib.php');
-                $configfn = js_minify($fullpath);
+                $configfn = core_minify::js_files(array($fullpath));
                 $cache->set($keyname, $configfn);
             }
         }
@@ -1657,6 +1657,7 @@ class YUI_config {
         $cache = cache::make('core', 'yuimodules');
         if (!isset($CFG->jsrev) || $CFG->jsrev == -1) {
             $metadata = array();
+            $metadata = $this->get_moodle_metadata();
             $cache->delete('metadata');
         } else {
             // Attempt to get the metadata from the cache.
@@ -1744,7 +1745,6 @@ class YUI_config {
  */
 function js_reset_all_caches() {
     global $CFG;
-    require_once("$CFG->libdir/filelib.php");
 
     $next = time();
     if (isset($CFG->jsrev) and $next <= $CFG->jsrev and $CFG->jsrev - $next < 60*60) {
@@ -1755,5 +1755,4 @@ function js_reset_all_caches() {
     }
 
     set_config('jsrev', $next);
-    fulldelete("$CFG->cachedir/js");
 }

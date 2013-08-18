@@ -172,6 +172,9 @@ ini_set('include_path', $CFG->libdir.'/pear' . PATH_SEPARATOR . ini_get('include
 
 require_once($CFG->libdir.'/classes/component.php');
 require_once($CFG->libdir.'/classes/text.php');
+require_once($CFG->libdir.'/classes/string_manager.php');
+require_once($CFG->libdir.'/classes/string_manager_install.php');
+require_once($CFG->libdir.'/classes/string_manager_standard.php');
 require_once($CFG->libdir.'/installlib.php');
 require_once($CFG->libdir.'/clilib.php');
 require_once($CFG->libdir.'/setuplib.php');
@@ -188,6 +191,7 @@ $CFG->target_release = $release;
 
 //Database types
 $databases = array('mysqli' => moodle_database::get_driver_instance('mysqli', 'native'),
+                   'mariadb'=> moodle_database::get_driver_instance('mariadb', 'native'),
                    'pgsql'  => moodle_database::get_driver_instance('pgsql',  'native'),
                    'oci'    => moodle_database::get_driver_instance('oci',    'native'),
                    'sqlsrv' => moodle_database::get_driver_instance('sqlsrv', 'native'), // MS SQL*Server PHP driver
@@ -308,6 +312,8 @@ if ($interactive) {
     }
 }
 $CFG->directorypermissions = $chmod;
+$CFG->filepermissions      = ($CFG->directorypermissions & 0666);
+$CFG->umaskpermissions     = (($CFG->directorypermissions & 0777) ^ 0777);
 
 //We need wwwroot before we test dataroot
 $wwwroot = clean_param($options['wwwroot'], PARAM_URL);
@@ -394,8 +400,9 @@ if ($interactive) {
         cli_error(get_string('pathserrcreatedataroot', 'install', $a));
     }
 }
-$CFG->tempdir  = $CFG->dataroot.'/temp';
-$CFG->cachedir = $CFG->dataroot.'/cache';
+$CFG->tempdir       = $CFG->dataroot.'/temp';
+$CFG->cachedir      = $CFG->dataroot.'/cache';
+$CFG->localcachedir = $CFG->dataroot.'/localcache';
 
 // download required lang packs
 if ($CFG->lang !== 'en') {

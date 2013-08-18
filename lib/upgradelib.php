@@ -1045,6 +1045,7 @@ function external_update_descriptions($component) {
         $service['requiredcapability'] = empty($service['requiredcapability']) ? null : $service['requiredcapability'];
         $service['restrictedusers'] = !isset($service['restrictedusers']) ? 1 : $service['restrictedusers'];
         $service['downloadfiles'] = !isset($service['downloadfiles']) ? 0 : $service['downloadfiles'];
+        $service['uploadfiles'] = !isset($service['uploadfiles']) ? 0 : $service['uploadfiles'];
         $service['shortname'] = !isset($service['shortname']) ? null : $service['shortname'];
 
         $update = false;
@@ -1058,6 +1059,10 @@ function external_update_descriptions($component) {
         }
         if ($dbservice->downloadfiles != $service['downloadfiles']) {
             $dbservice->downloadfiles = $service['downloadfiles'];
+            $update = true;
+        }
+        if ($dbservice->uploadfiles != $service['uploadfiles']) {
+            $dbservice->uploadfiles = $service['uploadfiles'];
             $update = true;
         }
         //if shortname is not a PARAM_ALPHANUMEXT, fail (tested here for service update and creation)
@@ -1114,6 +1119,7 @@ function external_update_descriptions($component) {
         $dbservice->requiredcapability = empty($service['requiredcapability']) ? null : $service['requiredcapability'];
         $dbservice->restrictedusers    = !isset($service['restrictedusers']) ? 1 : $service['restrictedusers'];
         $dbservice->downloadfiles      = !isset($service['downloadfiles']) ? 0 : $service['downloadfiles'];
+        $dbservice->uploadfiles        = !isset($service['uploadfiles']) ? 0 : $service['uploadfiles'];
         $dbservice->shortname          = !isset($service['shortname']) ? null : $service['shortname'];
         $dbservice->component          = $component;
         $dbservice->timecreated        = time();
@@ -1467,12 +1473,17 @@ function install_core($version, $verbose) {
     global $CFG, $DB;
 
     // We can not call purge_all_caches() yet, make sure the temp and cache dirs exist and are empty.
-    make_cache_directory('', true);
     remove_dir($CFG->cachedir.'', true);
-    make_temp_directory('', true);
+    make_cache_directory('', true);
+
+    remove_dir($CFG->localcachedir.'', true);
+    make_localcache_directory('', true);
+
     remove_dir($CFG->tempdir.'', true);
-    make_writable_directory($CFG->dataroot.'/muc', true);
+    make_temp_directory('', true);
+
     remove_dir($CFG->dataroot.'/muc', true);
+    make_writable_directory($CFG->dataroot.'/muc', true);
 
     try {
         set_time_limit(600);
@@ -1589,6 +1600,8 @@ function upgrade_noncore($verbose) {
         }
         // Update cache definitions. Involves scanning each plugin for any changes.
         cache_helper::update_definitions();
+        // Mark the site as upgraded.
+        set_config('allversionshash', core_component::get_all_versions_hash());
     } catch (Exception $ex) {
         upgrade_handle_exception($ex);
     }
@@ -1976,7 +1989,7 @@ function upgrade_rename_old_backup_files_using_shortname() {
     }
 
     require_once($CFG->dirroot.'/backup/util/includes/backup_includes.php');
-    $backupword = str_replace(' ', '_', textlib::strtolower(get_string('backupfilename')));
+    $backupword = str_replace(' ', '_', core_text::strtolower(get_string('backupfilename')));
     $backupword = trim(clean_filename($backupword), '_');
     $filename = $backupword . '-' . backup::FORMAT_MOODLE . '-' . backup::TYPE_1COURSE . '-';
     $regex = '#^'.preg_quote($filename, '#').'.*\.mbz$#';
@@ -2027,13 +2040,13 @@ function upgrade_rename_old_backup_files_using_shortname() {
         $newname = $filename . $bcinfo->original_course_id . '-';
         if ($useshortname) {
             $shortname = str_replace(' ', '_', $bcinfo->original_course_shortname);
-            $shortname = textlib::strtolower(trim(clean_filename($shortname), '_'));
+            $shortname = core_text::strtolower(trim(clean_filename($shortname), '_'));
             $newname .= $shortname . '-';
         }
 
         $backupdateformat = str_replace(' ', '_', get_string('backupnameformat', 'langconfig'));
         $date = userdate($bcinfo->backup_date, $backupdateformat, 99, false);
-        $date = textlib::strtolower(trim(clean_filename($date), '_'));
+        $date = core_text::strtolower(trim(clean_filename($date), '_'));
         $newname .= $date;
 
         if (isset($bcinfo->root_settings['users']) && !$bcinfo->root_settings['users']) {

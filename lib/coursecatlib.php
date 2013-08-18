@@ -48,7 +48,7 @@ class coursecat implements renderable, cacheable_object, IteratorAggregate {
         'descriptionformat' => null, // not cached
         'parent' => array('pa', 0),
         'sortorder' => array('so', 0),
-        'coursecount' => null, // not cached
+        'coursecount' => array('cc', 0),
         'visible' => array('vi', 1),
         'visibleold' => null, // not cached
         'timemodified' => null, // not cached
@@ -310,14 +310,14 @@ class coursecat implements renderable, cacheable_object, IteratorAggregate {
         if (empty($data->name)) {
             throw new moodle_exception('categorynamerequired');
         }
-        if (textlib::strlen($data->name) > 255) {
+        if (core_text::strlen($data->name) > 255) {
             throw new moodle_exception('categorytoolong');
         }
         $newcategory->name = $data->name;
 
         // validate and set idnumber
         if (!empty($data->idnumber)) {
-            if (textlib::strlen($data->idnumber) > 100) {
+            if (core_text::strlen($data->idnumber) > 100) {
                 throw new moodle_exception('idnumbertoolong');
             }
             if ($DB->record_exists('course_categories', array('idnumber' => $data->idnumber))) {
@@ -427,14 +427,14 @@ class coursecat implements renderable, cacheable_object, IteratorAggregate {
         }
 
         if (!empty($data->name) && $data->name !== $this->name) {
-            if (textlib::strlen($data->name) > 255) {
+            if (core_text::strlen($data->name) > 255) {
                 throw new moodle_exception('categorytoolong');
             }
             $newcategory->name = $data->name;
         }
 
         if (isset($data->idnumber) && $data->idnumber != $this->idnumber) {
-            if (textlib::strlen($data->idnumber) > 100) {
+            if (core_text::strlen($data->idnumber) > 100) {
                 throw new moodle_exception('idnumbertoolong');
             }
             if ($DB->record_exists('course_categories', array('idnumber' => $data->idnumber))) {
@@ -921,17 +921,17 @@ class coursecat implements renderable, cacheable_object, IteratorAggregate {
                 }
             }
         }
-        // sorting by one field - use collatorlib
+        // sorting by one field - use core_collator
         if (count($sortfields) == 1) {
             $property = key($sortfields);
             if (in_array($property, array('sortorder', 'id', 'visible', 'parent', 'depth'))) {
-                $sortflag = collatorlib::SORT_NUMERIC;
+                $sortflag = core_collator::SORT_NUMERIC;
             } else if (in_array($property, array('idnumber', 'displayname', 'name', 'shortname', 'fullname'))) {
-                $sortflag = collatorlib::SORT_STRING;
+                $sortflag = core_collator::SORT_STRING;
             } else {
-                $sortflag = collatorlib::SORT_REGULAR;
+                $sortflag = core_collator::SORT_REGULAR;
             }
-            collatorlib::asort_objects_by_property($records, $property, $sortflag);
+            core_collator::asort_objects_by_property($records, $property, $sortflag);
             if ($sortfields[$property] < 0) {
                 $records = array_reverse($records, true);
             }
@@ -1896,6 +1896,7 @@ class coursecat implements renderable, cacheable_object, IteratorAggregate {
             foreach ($rs as $record) {
                 // If the category's parent is not visible to the user, it is not visible as well.
                 if (!$record->parent || isset($baselist[$record->parent])) {
+                    context_helper::preload_from_record($record);
                     $context = context_coursecat::instance($record->id);
                     if (!$record->visible && !has_capability('moodle/category:viewhiddencategories', $context)) {
                         // No cap to view category, added to neither $baselist nor $thislist

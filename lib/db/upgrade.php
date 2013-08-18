@@ -2306,5 +2306,26 @@ function xmldb_main_upgrade($oldversion) {
         upgrade_main_savepoint(true, 2013071500.02);
     }
 
+    if ($oldversion < 2013072600.01) {
+        upgrade_mssql_nvarcharmax();
+        upgrade_mssql_varbinarymax();
+
+        upgrade_main_savepoint(true, 2013072600.01);
+    }
+
+    if ($oldversion < 2013081200.00) {
+        // Define field uploadfiles to be added to external_services.
+        $table = new xmldb_table('external_services');
+        $field = new xmldb_field('uploadfiles', XMLDB_TYPE_INTEGER, '1', null, XMLDB_NOTNULL, null, '0', 'downloadfiles');
+
+        // Conditionally launch add field uploadfiles.
+        if (!$dbman->field_exists($table, $field)) {
+            $dbman->add_field($table, $field);
+        }
+
+        // Main savepoint reached.
+        upgrade_main_savepoint(true, 2013081200.00);
+    }
+
     return true;
 }

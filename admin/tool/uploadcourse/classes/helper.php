@@ -44,6 +44,13 @@ class tool_uploadcourse_helper {
      */
     public static function clean_restore_content() {
         global $CFG;
+
+        // There are some sloppy unclosed file handles in backup/restore code,
+        // let's hope somebody unset all controllers before calling this
+        // and destroy magic will close all remaining open file handles,
+        // otherwise Windows will fail deleting the directory.
+        gc_collect_cycles();
+
         if (!empty($CFG->keeptempdirectoriesonbackup)) {
             $cache = cache::make('tool_uploadcourse', 'helper');
             $backupids = (array) $cache->get('backupids');
@@ -110,18 +117,18 @@ class tool_uploadcourse_helper {
 
         switch ($block[1]) {
             case '+':
-                $repl = textlib::strtoupper($repl);
+                $repl = core_text::strtoupper($repl);
                 break;
             case '-':
-                $repl = textlib::strtolower($repl);
+                $repl = core_text::strtolower($repl);
                 break;
             case '~':
-                $repl = textlib::strtotitle($repl);
+                $repl = core_text::strtotitle($repl);
                 break;
         }
 
         if (!empty($block[2])) {
-            $repl = textlib::substr($repl, 0, $block[2]);
+            $repl = core_text::substr($repl, 0, $block[2]);
         }
 
         return $repl;

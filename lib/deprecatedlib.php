@@ -31,6 +31,47 @@
 defined('MOODLE_INTERNAL') || die();
 
 /**
+ * Minify JavaScript files.
+ *
+ * @deprecated since 2.6
+ *
+ * @param array $files
+ * @return string
+ */
+function js_minify($files) {
+    debugging('js_minify() is deprecated, use core_minify::js_files() or core_minify::js() instead.');
+    return core_minify::js_files($files);
+}
+
+/**
+ * Minify CSS files.
+ *
+ * @deprecated since 2.6
+ *
+ * @param array $files
+ * @return string
+ */
+function css_minify_css($files) {
+    debugging('css_minify_css() is deprecated, use core_minify::css_files() or core_minify::css() instead.');
+    return core_minify::css_files($files);
+}
+
+/**
+ * Function to call all event handlers when triggering an event
+ *
+ * @deprecated since 2.6
+ *
+ * @param string $eventname name of the event
+ * @param mixed $eventdata event data object
+ * @return int number of failed events
+ */
+function events_trigger($eventname, $eventdata) {
+    // TODO: uncomment after conversion of all events in standard distribution
+    // debugging('events_trigger() is deprecated, please use new events instead', DEBUG_DEVELOPER);
+    return events_trigger_legacy($eventname, $eventdata);
+}
+
+/**
  * List all core subsystems and their location
  *
  * This is a whitelist of components that are part of the core and their
@@ -455,9 +496,6 @@ function is_course_participant($userid, $courseid) {
  *
  * used to print recent activity
  *
- * @todo MDL-36993 this function is still used in block_recent_activity, deprecate properly
- * @global object
- * @uses CONTEXT_COURSE
  * @param int $courseid The course in question.
  * @param int $timestart The date to check forward of
  * @return object|false  {@link $USER} records or false if error.
@@ -465,8 +503,9 @@ function is_course_participant($userid, $courseid) {
 function get_recent_enrolments($courseid, $timestart) {
     global $DB;
 
-    $context = context_course::instance($courseid);
+    debugging('get_recent_enrolments() is deprecated as it returned inaccurate results.', DEBUG_DEVELOPER);
 
+    $context = context_course::instance($courseid);
     $sql = "SELECT u.id, u.firstname, u.lastname, MAX(l.time)
               FROM {user} u, {role_assignments} ra, {log} l
              WHERE l.time > ?
@@ -1989,23 +2028,23 @@ function show_event($event) {
 }
 
 /**
- * @deprecated Use textlib::strtolower($text) instead.
+ * @deprecated Use core_text::strtolower($text) instead.
  */
 function moodle_strtolower($string, $encoding='') {
-    throw new coding_exception('moodle_strtolower() cannot be used any more. Please use textlib::strtolower() instead.');
+    throw new coding_exception('moodle_strtolower() cannot be used any more. Please use core_text::strtolower() instead.');
 }
 
 /**
  * Original singleton helper function, please use static methods instead,
- * ex: textlib::convert()
+ * ex: core_text::convert()
  *
- * @deprecated since Moodle 2.2 use textlib::xxxx() instead
+ * @deprecated since Moodle 2.2 use core_text::xxxx() instead
  * @see textlib
  * @return textlib instance
  */
 function textlib_get_instance() {
 
-    debugging('textlib_get_instance() is deprecated. Please use static calling textlib::functioname() instead.', DEBUG_DEVELOPER);
+    debugging('textlib_get_instance() is deprecated. Please use static calling core_text::functioname() instead.', DEBUG_DEVELOPER);
 
     return new textlib();
 }
@@ -4336,4 +4375,47 @@ function context_instance_preload_sql($joinon, $contextlevel, $tablealias) {
     $select = ", " . context_helper::get_preload_record_columns_sql($tablealias);
     $join = "LEFT JOIN {context} $tablealias ON ($tablealias.instanceid = $joinon AND $tablealias.contextlevel = $contextlevel)";
     return array($select, $join);
+}
+
+/**
+ * Gets a string for sql calls, searching for stuff in this context or above.
+ *
+ * @deprecated since 2.2
+ * @see context::get_parent_context_ids()
+ * @param context $context
+ * @return string
+ */
+function get_related_contexts_string(context $context) {
+    debugging('get_related_contexts_string() is deprecated, please use $context->get_parent_context_ids(true) instead.', DEBUG_DEVELOPER);
+    if ($parents = $context->get_parent_context_ids()) {
+        return (' IN ('.$context->id.','.implode(',', $parents).')');
+    } else {
+        return (' ='.$context->id);
+    }
+}
+
+/**
+ * @deprecated since Moodle 2.0 - use $PAGE->user_is_editing() instead.
+ * @see moodle_page->user_is_editing()
+ */
+function isediting() {
+    throw new coding_exception('isediting() can not be used any more, please use $PAGE->user_is_editing() instead.');
+}
+
+/**
+ * Get a list of all the plugins of a given type that contain a particular file.
+ *
+ * @param string $plugintype the type of plugin, e.g. 'mod' or 'report'.
+ * @param string $file the name of file that must be present in the plugin.
+ *      (e.g. 'view.php', 'db/install.xml').
+ * @param bool $include if true (default false), the file will be include_once-ed if found.
+ * @return array with plugin name as keys (e.g. 'forum', 'courselist') and the path
+ *      to the file relative to dirroot as value (e.g. "$CFG->dirroot/mod/forum/view.php").
+ * @deprecated since 2.6
+ * @see core_component::get_plugin_list_with_file()
+ */
+function get_plugin_list_with_file($plugintype, $file, $include = false) {
+    debugging('get_plugin_list_with_file() is deprecated, please use core_component::get_plugin_list_with_file() instead.',
+        DEBUG_DEVELOPER);
+    return core_component::get_plugin_list_with_file($plugintype, $file, $include);
 }

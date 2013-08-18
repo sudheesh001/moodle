@@ -108,6 +108,7 @@ class cache_config_writer extends cache_config {
             fflush($handle);
             fclose($handle);
             $locking->unlock('configwrite', 'config');
+            @chmod($cachefile, $CFG->filepermissions);
             // Tell PHP to recompile the script.
             core_component::invalidate_opcode_php_cache($cachefile);
         } else {
@@ -148,7 +149,7 @@ class cache_config_writer extends cache_config {
         }
         $class = 'cachestore_'.$plugin;
         if (!class_exists($class)) {
-            $plugins = get_plugin_list_with_file('cachestore', 'lib.php');
+            $plugins = core_component::get_plugin_list_with_file('cachestore', 'lib.php');
             if (!array_key_exists($plugin, $plugins)) {
                 throw new cache_exception('Invalid plugin name specified. The plugin does not exist or is not valid.');
             }
@@ -203,7 +204,7 @@ class cache_config_writer extends cache_config {
         }
         $class = 'cachelock_'.$plugin;
         if (!class_exists($class)) {
-            $plugins = get_plugin_list_with_file('cachelock', 'lib.php');
+            $plugins = core_component::get_plugin_list_with_file('cachelock', 'lib.php');
             if (!array_key_exists($plugin, $plugins)) {
                 throw new cache_exception('Invalid lock name specified. The plugin does not exist or is not valid.');
             }
@@ -314,7 +315,7 @@ class cache_config_writer extends cache_config {
         if (!array_key_exists($name, $this->configstores)) {
             throw new cache_exception('The requested instance does not exist.');
         }
-        $plugins = get_plugin_list_with_file('cachestore', 'lib.php');
+        $plugins = core_component::get_plugin_list_with_file('cachestore', 'lib.php');
         if (!array_key_exists($plugin, $plugins)) {
             throw new cache_exception('Invalid plugin name specified. The plugin either does not exist or is not valid.');
         }
@@ -522,7 +523,7 @@ class cache_config_writer extends cache_config {
         if (!$coreonly) {
             $plugintypes = core_component::get_plugin_types();
             foreach ($plugintypes as $type => $location) {
-                $plugins = get_plugin_list_with_file($type, 'db/caches.php');
+                $plugins = core_component::get_plugin_list_with_file($type, 'db/caches.php');
                 foreach ($plugins as $plugin => $filepath) {
                     $component = clean_param($type.'_'.$plugin, PARAM_COMPONENT); // Standardised plugin name.
                     $files[$component] = $filepath;
@@ -737,7 +738,7 @@ abstract class cache_administration_helper extends cache_helper {
      */
     public static function get_store_plugin_summaries() {
         $return = array();
-        $plugins = get_plugin_list_with_file('cachestore', 'lib.php', true);
+        $plugins = core_component::get_plugin_list_with_file('cachestore', 'lib.php', true);
         foreach ($plugins as $plugin => $path) {
             $class = 'cachestore_'.$plugin;
             $return[$plugin] = array(
